@@ -9,9 +9,10 @@ import gc
 
 class Trainer:
     def __init__(self, c_in=3, c_out=3, ch_list=(128, 256, 256, 256), attn_res=(16,), heads=1, cph=None,
-                 norm_g=32, mask_percent=(0.0, 0.20), lr=2e-5, time_steps=1000, image_size=256, loss_type='l2',
-                 ema_iterations_start=5000, no_of=64, freq=5, sample_ema_only=True, beta_start=1e-4, beta_end=0.02,
-                 device=None, is_logging=False, train_logdir="logs/train_logs/", val_logdir="logs/val_logs/"):
+                 norm_g=32, mask_percent=(0.0, 0.20), in_paint=True, lr=2e-5, time_steps=1000, image_size=256,
+                 loss_type='l2', ema_iterations_start=5000, no_of=64, freq=5, sample_ema_only=True,
+                 beta_start=1e-4, beta_end=0.02, device=None, is_logging=False,
+                 train_logdir="logs/train_logs/", val_logdir="logs/val_logs/"):
 
         """
 
@@ -23,6 +24,7 @@ class Trainer:
         :param norm_g: number of groups for group norm.
         :param cph: no of channels per head (used if heads is set to -1)
         :param mask_percent: percentage of image to mark from each side as range
+        :param in_paint: boolean value, whether to train for image inpaint.
         :param lr: constant learning rate to train with
         :param time_steps: no of diffusion time steps
         :param image_size: input image size
@@ -57,6 +59,7 @@ class Trainer:
         self.attn_res = attn_res
         self.norm_g = norm_g
         self.mask_percent = mask_percent
+        self.in_paint = in_paint
         self.heads = heads
         self.cph = cph
 
@@ -68,13 +71,13 @@ class Trainer:
             self.model = UNet(c_in=self.c_in, c_out=self.c_out, ch_list=self.ch_list, attn_res=self.attn_res,
                               heads=self.heads, cph=self.cph, mask_percent_range=self.mask_percent,
                               mid_attn=True, resamp_with_conv=True, num_res_blocks=2, img_res=self.image_size,
-                              dropout=0, norm_g=self.norm_g,
+                              dropout=0, norm_g=self.norm_g, in_paint=self.in_paint,
                               time_steps=self.time_steps, beta_start=self.beta_start, beta_end=self.beta_end)
 
             self.ema_model = UNet(c_in=self.c_in, c_out=self.c_out, ch_list=self.ch_list, attn_res=self.attn_res,
                                   heads=self.heads, cph=self.cph, mask_percent_range=self.mask_percent,
                                   mid_attn=True, resamp_with_conv=True, num_res_blocks=2, img_res=self.image_size,
-                                  dropout=0, norm_g=self.norm_g,
+                                  dropout=0, norm_g=self.norm_g, in_paint=self.in_paint,
                                   time_steps=self.time_steps, beta_start=self.beta_start, beta_end=self.beta_end)
 
             if loss_type == 'l2':
@@ -245,8 +248,8 @@ class Trainer:
 
         :param epoch: epoch number to name the output file (Any string or int).
         :param no_of: number of images to generate.
-        :param image_references: Sample images that undergoes masking which the generative model unmasks using
-        generative fill. Masking quantity is done based on 'mask_percent'.
+        :param image_references: Sample images that undergoes masking or missing which the generative model unmasks
+        or fills using generative fill. Masking quantity is done based on 'mask_percent' & 'in_paint' parameter.
         :param use_main: boolean value, whether to use main model for generating.
         """
         # Sample Gaussian noise
@@ -257,10 +260,12 @@ class Trainer:
         images = next(iter(images))
 
         # Creating masked images
-        masked_images = self.model.mask_out(image_references)
-        masked_images = self.device.experimental_distribute_dataset(
-            tf.data.Dataset.from_tensor_slices(masked_images).batch(no_of, drop_remainder=True)
-        )
+        masked_images = tf.data.Dataset.from_tensor_slices(image_references)
+        masked_images = masked_images.map(
+            lambda x: tf.squeeze(self.model.mask_out(x)),
+            num_parallel_calls=tf.data.AUTOTUNE
+        ).batch(no_of, drop_remainder=True)
+        masked_images = self.device.experimental_distribute_dataset(masked_images)
         masked_images = next(iter(masked_images))
 
         # Reverse diffusion for t time steps
