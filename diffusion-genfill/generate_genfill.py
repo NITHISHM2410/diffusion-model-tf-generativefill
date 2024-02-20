@@ -3,13 +3,30 @@ from tqdm import tqdm
 
 
 class GenerateImagesGenFill:
-    def __init__(self, model, device):
+    def __init__(self, model, device, ckpt_path):
         """
         :param model: A trained GenFill diffusion model instance
         :param device: A tf.distribute.Strategy instance
         """
         self.model = model
         self.device = device
+        self.load_from_checkpoint(ckpt_path)
+
+    def load_from_checkpoint(self, ckpt_path):
+        """
+        loads weights into the model from checkpoint path.
+        :param ckpt_path: trained checkpoint path
+
+        """
+        ckpt = tf.train.Checkpoint(
+            model=self.model,
+            ema_model=self.model,
+            best_model=self.model,
+            optimizer=tf.keras.optimizers.Adam(),
+            train_counter=tf.Variable(0),
+            val_counter=tf.Variable(0),
+        )
+        ckpt.restore(ckpt_path)
 
     @tf.function
     def distribute_fn(self, images, t, mask):

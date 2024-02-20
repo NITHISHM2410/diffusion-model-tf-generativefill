@@ -511,7 +511,7 @@ class Decoder(tf.keras.Model):
 class UNet(tf.keras.Model):
     def __init__(self, c_in=3, c_out=3, ch_list=(128, 256, 256, 256), norm_g=32, attn_res=(16,), heads=-1, cph=32,
                  mid_attn=True, resamp_with_conv=True, num_res_blocks=2, img_res=256, dropout=0, time_steps=1000,
-                 beta_start=1e-4, beta_end=0.02, num_classes=1, cfg_weight=3, mask=False, inherited=False):
+                 beta_start=1e-4, beta_end=0.02, num_classes=1, cfg_weight=3, mask=False):
         """
         An UNet model down samples and up samples and allows skip connections across both the up and down sampling.
         Also applies Forward diffusion, Positional embedding and class conditioning.
@@ -534,7 +534,6 @@ class UNet(tf.keras.Model):
         :param num_classes: number of classes for conditional generation.
         :param cfg_weight: interpolation weight for conditional generation.
         :param mask: boolean value, whether to mask input for mask filling task.
-        :param inherited: boolean value, whether the instance is inheriting the class 'UNet'.
         """
         super(UNet, self).__init__()
         self.c_in = c_in
@@ -645,7 +644,7 @@ class UNet(tf.keras.Model):
             self.flatten = tf.keras.layers.Reshape(target_shape=())
 
         # build
-        if not inherited:
+        if not mask:
             self.build([(None, self.img_res, self.img_res, self.c_in), (None, 1), (None, 1)])
 
     def call(self, inputs, training=None, **kwargs):
@@ -728,7 +727,7 @@ class UNetGenFill(UNet):
                  beta_start=1e-4, beta_end=0.02, mask_percent_range=(0.0, 0.20), in_paint=True):
         """
 
-        A Mask filling model down samples and up samples & allows skip connections across both the up and down sampling.
+        Model that uses UNet for diffusion based Generative fill tasks like image inpainting, image expanding, object replacement.
         Also applies Forward diffusion, Positional embedding and class conditioning.
 
         :param c_in: input channels of this model's inputs.
@@ -753,7 +752,7 @@ class UNetGenFill(UNet):
                          norm_g=norm_g, mid_attn=mid_attn, resamp_with_conv=resamp_with_conv,
                          num_res_blocks=num_res_blocks, img_res=img_res, dropout=dropout,
                          time_steps=time_steps, beta_start=beta_start, beta_end=beta_end,
-                         num_classes=1, cfg_weight=3, mask=True, inherited=True)
+                         num_classes=1, cfg_weight=3, mask=True)
 
         self.mask_percent_range = mask_percent_range
         self.in_paint = in_paint
