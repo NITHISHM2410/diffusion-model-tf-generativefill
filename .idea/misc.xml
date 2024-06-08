@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="CLIP_TF" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="CLIP_TF" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="tf" project-jdk-type="Python SDK" />
 </project>
